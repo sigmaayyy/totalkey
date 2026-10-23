@@ -6,34 +6,139 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TotalKey</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 0;
+      min-height: 100vh;
       background: #10121b;
       color: white;
       font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 60px 20px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
     }
-    h1 { color: #a78bfa; font-size: 42px; }
-    p { color: #cbd5e1; }
-    a {
+    main {
+      width: 100%;
+      max-width: 440px;
+      padding: 32px;
+      background: #191c29;
+      border: 1px solid #303449;
+      border-radius: 18px;
+      text-align: center;
+    }
+    h1 { color: #a78bfa; margin-top: 0; }
+    p { color: #cbd5e1; line-height: 1.5; }
+    button, .checkpoint {
       display: block;
-      max-width: 320px;
-      margin: 14px auto;
+      width: 100%;
+      margin: 12px 0;
       padding: 15px;
+      border: 0;
       border-radius: 10px;
       background: #8b5cf6;
       color: white;
-      text-decoration: none;
+      font-size: 15px;
       font-weight: bold;
+      text-decoration: none;
+      cursor: pointer;
     }
+    button:disabled { opacity: .5; cursor: wait; }
+    #status { overflow-wrap: anywhere; }
+    #key { font-weight: bold; color: #c4b5fd; }
   </style>
 </head>
 <body>
-  <h1>TotalKey</h1>
-  <p>Get your Slap Battles key</p>
-  <a href="https://cuty.io/7AROohQJqB">Checkpoint 1</a>
-  <a href="https://cuty.io/totalkey">Checkpoint 2</a>
-  <a href="https://cuty.io/totalkey3">Checkpoint 3</a>
+  <main>
+    <h1>TotalKey</h1>
+    <p>Complete the checkpoint process to get your Slap Battles key.</p>
+
+    <button id="start">Start</button>
+
+    <section id="steps" hidden>
+      <a class="checkpoint" href="https://cuty.io/7AROohQJqB" target="_blank" rel="noopener">Checkpoint 1</a>
+      <a class="checkpoint" href="https://cuty.io/totalkey" target="_blank" rel="noopener">Checkpoint 2</a>
+      <a class="checkpoint" href="https://cuty.io/totalkey3" target="_blank" rel="noopener">Checkpoint 3</a>
+      <button id="claim">Get my key</button>
+    </section>
+
+    <p id="status" role="status"></p>
+    <p id="key"></p>
+    <button id="copy" hidden>Copy key</button>
+  </main>
+
+  <script>
+    const startButton = document.querySelector("#start");
+    const steps = document.querySelector("#steps");
+    const claimButton = document.querySelector("#claim");
+    const status = document.querySelector("#status");
+    const keyOutput = document.querySelector("#key");
+    const copyButton = document.querySelector("#copy");
+
+    let session = null;
+
+    startButton.addEventListener("click", async () => {
+      startButton.disabled = true;
+      status.textContent = "Starting...";
+      try {
+        const response = await fetch("/.netlify/functions/start", {
+          method: "POST"
+        });
+        const data = await response.json();
+        if (!response.ok || !data.session) {
+          throw new Error(data.error || "Could not start.");
+        }
+        session = data.session;
+        steps.hidden = false;
+        startButton.hidden = true;
+        status.textContent = "Complete the checkpoints, then request your key.";
+      } catch (error) {
+        status.textContent = error.message || "Could not connect. Try again.";
+        startButton.disabled = false;
+      }
+    });
+
+    claimButton.addEventListener("click", async () => {
+      if (!session) return;
+      claimButton.disabled = true;
+      status.textContent = "Checking...";
+      keyOutput.textContent = "";
+      copyButton.hidden = true;
+
+      try {
+        const response = await fetch("/.netlify/functions/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session })
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            response.status === 403 && data.error === "Please try again later"
+              ? "Please finish waiting before requesting your key."
+              : (data.error || "Validation failed.")
+          );
+        }
+
+        keyOutput.textContent = data.key;
+        status.textContent = "Key generated. It expires in 24 hours.";
+        copyButton.hidden = false;
+        session = null;
+      } catch (error) {
+        status.textContent = error.message || "Something went wrong.";
+      } finally {
+        if (session) claimButton.disabled = false;
+      }
+    });
+
+    copyButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(keyOutput.textContent);
+        status.textContent = "Key copied!";
+      } catch {
+        status.textContent = "Please select and copy the key manually.";
+      }
+    });
+  </script>
 </body>
 </html>
